@@ -7,10 +7,11 @@ export interface FillData {
   name: string;
   date: string;
   id?: string;
+  field?: string;
 }
 
 export async function fillCertificate(data: FillData): Promise<Buffer> {
-  const { name, date, id } = data;
+  const { name, date, id, field } = data;
 
   // 1) Load your blank template
   const templatePath = path.join(
@@ -28,40 +29,53 @@ export async function fillCertificate(data: FillData): Promise<Buffer> {
 
   // 3) Embed fonts
   const nameFont   = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-  const footerFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const regularFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-  // 4) Draw the recipient’s name, centered horizontally
+  // Recipient's Name - positioned to fit under "proudly presented to"
   const nameSize  = 36;
   const nameWidth = nameFont.widthOfTextAtSize(name, nameSize);
   page.drawText(name, {
     x: (width - nameWidth) / 2,
-    y: height - 300,    // tweak vertically as needed
+    y: height / 2 - 25, // Adjusted for the template layout
     size: nameSize,
     font: nameFont,
     color: rgb(0, 0, 0),
   });
 
-  // 5) Draw the date in the top-right corner so it no longer overlaps signatures
-  page.drawText(`Date: ${date}`, {
-    x: width - 200,     // adjust left/right as needed
-    y: height - 100,    // ~100pts down from top border
-    size: 12,
-    font: footerFont,
-    color: rgb(0, 0, 0),
-  });
-
-  // 6) Draw the certificate ID in the lower-left, if provided
-  if (id) {
-    page.drawText(`Certificate No: ${id}`, {
-      x: 50,
-      y: 120,
-      size: 10,
-      font: footerFont,
-      color: rgb(0, 0, 0),
+  // "for completing the..." text
+  if (field) {
+    const completionText = `for completing the ${field} course on the RPL Platform`;
+    const completionTextSize = 12;
+    const completionTextWidth = regularFont.widthOfTextAtSize(completionText, completionTextSize);
+    page.drawText(completionText, {
+      x: (width - completionTextWidth) / 2,
+      y: height / 2 - 80, // Positioned below the name
+      size: completionTextSize,
+      font: regularFont,
+      color: rgb(0.2, 0.2, 0.2),
     });
   }
 
-  // 7) Serialize and return
+  // Date in the top-right
+  page.drawText(`Date: ${date}`, {
+    x: width - 150,
+    y: height - 60,
+    size: 12,
+    font: regularFont,
+    color: rgb(0.1, 0.1, 0.1),
+  });
+
+  // Certificate ID in the lower-left, positioned to avoid the signature line
+  if (id) {
+    page.drawText(`Certificate No: ${id}`, {
+      x: 60,
+      y: 80,
+      size: 10,
+      font: regularFont,
+      color: rgb(0.2, 0.2, 0.2),
+    });
+  }
+
   const pdfBytes = await pdfDoc.save();
   return Buffer.from(pdfBytes);
 }

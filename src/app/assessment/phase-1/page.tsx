@@ -3,13 +3,23 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import {
   BookOpen,
   ArrowRight,
-  UserCircle as LoaderCircle,
+  Loader,
   CheckCircle,
+  Scissors,
+  Wrench,
+  Zap,
+  Car,
+  Laptop,
+  Flame,
+  Sparkles,
+  ChevronRight,
+  ArrowLeft,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 interface Question {
   question: string;
@@ -17,232 +27,219 @@ interface Question {
 }
 
 const NITA_FIELDS = [
-  "Tailoring and Dressmaking",
-  "Plumbing and Pipefitting",
-  "Electrical Installation",
-  "Motor Vehicle Mechanics",
-  "ICT (Computer Operator/Web Design)",
-  "Welding and Fabrication",
-  "Hairdressing and Beauty Therapy",
+  { name: "Tailoring and Dressmaking", icon: Scissors },
+  { name: "Plumbing and Pipefitting", icon: Wrench },
+  { name: "Electrical Installation", icon: Zap },
+  { name: "Motor Vehicle Mechanics", icon: Car },
+  { name: "ICT (Computer Operator/Web Design)", icon: Laptop },
+  { name: "Welding and Fabrication", icon: Flame },
+  { name: "Hairdressing and Beauty Therapy", icon: Sparkles },
 ];
 
 export default function Phase1() {
-  const [field, setField] = useState("");
+  const [selectedField, setSelectedField] = useState<string | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [answers, setAnswers] = useState<string[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [hasUserSelectedField, setHasUserSelectedField] = useState(false);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
 
-  useEffect(() => {
-    const savedField = localStorage.getItem("phase-1_field");
-    const savedAnswers = localStorage.getItem("phase-1_answers");
-    if (savedField) setField(savedField);
-    if (savedAnswers) setAnswers(JSON.parse(savedAnswers));
-  }, []);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const generateQuestions = useCallback(async () => {
-    if (!field) return;
-    setLoading(true);
+  const router = useRouter();
+
+  const handleFieldSelect = async (fieldName: string) => {
+    setSelectedField(fieldName);
+    setIsLoading(true);
     try {
       const response = await fetch("/api/generate_questions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ field }),
+        body: JSON.stringify({ field: fieldName }),
       });
       const data = await response.json();
-      setQuestions(data.questions);
-      setAnswers(Array(data.questions.length).fill(""));
+      if (data.questions && data.questions.length > 0) {
+        setQuestions(data.questions);
+        setAnswers(Array(data.questions.length).fill(""));
+      } else {
+        throw new Error("No questions received from API.");
+      }
     } catch (error) {
       console.error("Failed to generate questions:", error);
-      alert("Something went wrong while fetching questions.");
+      alert("Something went wrong while fetching questions. Please try again.");
+      setSelectedField(null); // Reset on error
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
-  }, [field]);
-
-  const handleFieldChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setField(e.target.value);
-    setHasUserSelectedField(true);
   };
 
-  useEffect(() => {
-    if (hasUserSelectedField && field) {
-      void generateQuestions();
-    }
-  }, [hasUserSelectedField, field, generateQuestions]);
-
-  const handleAnswerChange = (index: number, value: string) => {
+  const handleAnswerChange = (value: string) => {
     const newAnswers = [...answers];
-    newAnswers[index] = value;
+    newAnswers[currentQuestionIndex] = value;
     setAnswers(newAnswers);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (answers.some((answer) => !answer.trim()) || answers.length !== questions.length) {
+  const handleNextQuestion = () => {
+    if (currentQuestionIndex < questions.length - 1) {
+      setCurrentQuestionIndex(currentQuestionIndex + 1);
+    } else {
+      // Final submission
+      handleSubmit();
+    }
+  };
+
+  const handlePreviousQuestion = () => {
+    if (currentQuestionIndex > 0) {
+      setCurrentQuestionIndex(currentQuestionIndex - 1);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (answers.some((answer) => !answer.trim())) {
       alert("Please answer all questions before proceeding.");
       return;
     }
-    setSaving(true);
+    setIsSaving(true);
     try {
-      localStorage.setItem("phase-1_field", field);
-      localStorage.setItem("phase-1_answers", JSON.stringify(answers));
-      setSaved(true);
       await fetch("/api/score_answers", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        field,
-        questions: questions.map((q) => q.question),
-        answers,
-      }),
-    });
-      setTimeout(() => {
-        window.location.href = "/assessment/phase-2";
-      }, 1500);
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          field: selectedField,
+          questions: questions.map((q) => q.question),
+          answers,
+        }),
+      });
+
+      if (selectedField) {
+        localStorage.setItem("phase-1_field", selectedField);
+      }
+
+      // Navigate to phase 2 on successful submission
+      router.push("/assessment/phase-2");
     } catch (error) {
       console.error("Error saving answers:", error);
       alert("There was an error saving your answers. Please try again.");
     } finally {
-      setSaving(false);
+      setIsSaving(false);
     }
   };
 
+  const progress = selectedField ? ((currentQuestionIndex + 1) / questions.length) * 100 : 0;
+
+  // UI for field selection
+  const renderFieldSelection = () => (
+    <>
+      <div className="text-center mb-10">
+        <h1 className="text-3xl font-bold text-gray-800">Knowledge Assessment</h1>
+        <p className="text-gray-600 mt-2">Please select your field of expertise to begin.</p>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {NITA_FIELDS.map((field) => (
+          <button
+            key={field.name}
+            onClick={() => handleFieldSelect(field.name)}
+            className="group flex flex-col items-center justify-center p-6 bg-white rounded-xl shadow-md hover:shadow-xl hover:bg-blue-50 transition-all duration-300 border-2 border-transparent hover:border-blue-500"
+          >
+            <field.icon className="w-12 h-12 text-blue-600 mb-4 transition-transform duration-300 group-hover:scale-110" />
+            <span className="text-lg font-semibold text-center text-gray-700">{field.name}</span>
+          </button>
+        ))}
+      </div>
+    </>
+  );
+
+  // UI for answering questions
+  const renderQuestionnaire = () => (
+    <div>
+      <div className="mb-8">
+        <h2 className="text-2xl font-bold text-gray-800 text-center">{selectedField} Assessment</h2>
+        <div className="mt-4">
+          <div className="flex justify-between text-sm text-gray-600 mb-2">
+            <span>Question {currentQuestionIndex + 1} of {questions.length}</span>
+            <span>{Math.round(progress)}% Complete</span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2.5">
+            <div className="bg-blue-600 h-2.5 rounded-full" style={{ width: `${progress}%` }}></div>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white p-8 rounded-xl shadow-lg animate-fadeIn">
+        <div className="mb-6">
+          <p className="text-sm text-gray-500 mb-2">Competency: {questions[currentQuestionIndex].competencyId}</p>
+          <h3 className="text-xl font-semibold text-gray-800">{questions[currentQuestionIndex].question}</h3>
+        </div>
+        <textarea
+          value={answers[currentQuestionIndex] ?? ""}
+          onChange={(e) => handleAnswerChange(e.target.value)}
+          placeholder="Type your detailed answer here..."
+          rows={8}
+          className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all resize-y"
+          required
+        />
+      </div>
+
+      <div className="mt-8 flex justify-between items-center">
+        <button
+          onClick={handlePreviousQuestion}
+          disabled={currentQuestionIndex === 0}
+          className="flex items-center gap-2 px-6 py-3 rounded-lg font-semibold text-gray-700 bg-gray-200 hover:bg-gray-300 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <ArrowLeft className="w-5 h-5" />
+          Previous
+        </button>
+        <button
+          onClick={handleNextQuestion}
+          disabled={isSaving || !answers[currentQuestionIndex]?.trim()}
+          className="flex items-center gap-2 px-8 py-3 rounded-lg font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400"
+        >
+          {isSaving ? (
+            <>
+              <Loader className="w-5 h-5 animate-spin" />
+              Submitting...
+            </>
+          ) : currentQuestionIndex < questions.length - 1 ? (
+            <>
+              Next Question <ArrowRight className="w-5 h-5" />
+            </>
+          ) : (
+            <>
+              Submit Answers <CheckCircle className="w-5 h-5" />
+            </>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm">
-        <div className="max-w-5xl mx-auto px-4 py-6">
-          <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-blue-600 transition-all duration-500 ease-in-out"
-              style={{ width: "33%" }}
-              role="progressbar"
-              aria-valuenow={33}
-              aria-valuemin={0}
-              aria-valuemax={100}
-            />
-          </div>
-          <div className="mt-6">
-            <div className="flex items-center justify-between">
-              {[{ number: 1, label: "Knowledge" }, { number: 2, label: "Scenario" }, { number: 3, label: "Practical" }].map((step, index) => {
-                const isCompleted = step.number < 1;
-                const isActive = step.number === 1;
-                return (
-                  <React.Fragment key={step.number}>
-                    <div className="flex flex-col items-center">
-                      <div
-                        className={`flex items-center justify-center w-10 h-10 rounded-full ${isCompleted ? "bg-green-100" : isActive ? "bg-blue-100" : "bg-gray-100"} transition-all duration-300 mb-2`}
-                      >
-                        {isCompleted ? <CheckCircle className="w-6 h-6 text-green-600" /> : <div className={`flex items-center justify-center w-6 h-6 rounded-full ${isActive ? "bg-blue-600 text-white" : "bg-gray-300 text-gray-600"} font-medium text-sm`}>{step.number}</div>}
-                      </div>
-                      <span className={`text-sm font-medium ${isCompleted ? "text-green-600" : isActive ? "text-blue-600" : "text-gray-500"}`}>{step.label}</span>
-                    </div>
-                    {index < 2 && <div className={`flex-1 h-1 mx-2 bg-gray-300`} />}
-                  </React.Fragment>
-                );
-              })}
+    <div className="min-h-screen bg-gray-100">
+      <div className="bg-white shadow-sm sticky top-0 z-10">
+        <div className="max-w-5xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 flex items-center justify-center bg-blue-600 text-white rounded-full font-bold text-lg">1</div>
+              <h1 className="text-xl font-bold text-gray-800">Knowledge</h1>
+            </div>
+            <div className="flex items-center text-sm font-medium text-gray-500">
+              <span>Scenario</span>
+              <ChevronRight className="w-5 h-5" />
+              <span>Practical</span>
             </div>
           </div>
         </div>
-      </header>
+      </div>
 
-      <main className="max-w-4xl mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Knowledge Assessment</h1>
-          <p className="text-gray-600">Please select your field of expertise and answer the questions to evaluate your knowledge.</p>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-md p-6 mb-8 transition-all">
-          <div className="flex items-start gap-4">
-            <div className="bg-blue-100 p-2 rounded-full mt-1">
-              <BookOpen className="text-blue-600 w-5 h-5" />
-            </div>
-            <div className="flex-1">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4">Select Your Field</h2>
-              <select
-                value={field}
-                onChange={handleFieldChange}
-                className="w-full border border-gray-300 rounded-md px-4 py-2 bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
-                disabled={loading}
-              >
-                <option value="">-- Select a NITA-aligned field --</option>
-                {NITA_FIELDS.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </div>
+      <main className="max-w-4xl mx-auto px-4 py-12">
+        {!selectedField ? (
+          renderFieldSelection()
+        ) : isLoading ? (
+          <div className="flex flex-col items-center justify-center py-20">
+            <Loader className="w-12 h-12 text-blue-600 animate-spin mb-4" />
+            <p className="text-lg text-gray-600">Preparing your assessment...</p>
           </div>
-        </div>
-
-        {loading && (
-          <div className="flex flex-col items-center justify-center py-12">
-            <LoaderCircle className="w-12 h-12 text-blue-600 animate-spin mb-4" />
-            <p className="text-gray-600">Generating questions based on your field...</p>
-          </div>
-        )}
-
-        {!loading && questions.length > 0 && (
-          <form onSubmit={handleSubmit}>
-            <div className="space-y-6 mb-8">
-              {questions.map((question, index) => (
-                <div key={index} className="bg-white rounded-lg shadow-md transition hover:shadow-lg">
-                  <div className="p-5 border-b border-gray-100">
-                    <div className="flex items-start gap-3">
-                      <div className="bg-blue-50 text-blue-600 font-bold rounded-full w-8 h-8 flex items-center justify-center">
-                        {index + 1}
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-medium text-gray-800 mb-1">{question.question}</h3>
-                        <p className="text-sm text-gray-500">Competency: {question.competencyId}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="p-5 bg-gray-50">
-                    <textarea
-                      value={answers[index] ?? ""}
-                      onChange={(e) => handleAnswerChange(index, e.target.value)}
-                      placeholder="Type your answer here..."
-                      rows={4}
-                      className="w-full px-4 py-3 rounded-md border border-gray-300 focus:border-blue-500 focus:ring focus:ring-blue-200 focus:ring-opacity-50 transition-all resize-none"
-                      required
-                    />
-                    <div className="mt-3 text-right">
-                      <span className="text-sm text-gray-500">{(answers[index] ?? "").length} characters</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex justify-end">
-              <button
-                type="submit"
-                disabled={saving || saved}
-                className={`flex items-center gap-2 px-6 py-3 rounded-md font-medium text-white ${saved ? "bg-green-600" : "bg-blue-600 hover:bg-blue-700"} transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500`}
-              >
-                {saving ? (
-                  <>
-                    <LoaderCircle className="w-5 h-5 animate-spin" />
-                    Saving...
-                  </>
-                ) : saved ? (
-                  <>
-                    <CheckCircle className="w-5 h-5" />
-                    Saved! Proceeding...
-                  </>
-                ) : (
-                  <>
-                    Continue to Phase 2
-                    <ArrowRight className="w-5 h-5" />
-                  </>
-                )}
-              </button>
-            </div>
-          </form>
+        ) : (
+          renderQuestionnaire()
         )}
       </main>
     </div>

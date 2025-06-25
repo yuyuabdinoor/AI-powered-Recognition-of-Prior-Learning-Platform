@@ -43,7 +43,7 @@ const faqItems = [
   },
   {
     question: "Who is this platform for?",
-    answer: "This platform is built for self-taught professionals, artisans, and experienced individuals who lack formal documentation but possess real-world experience. Whether you’re a tailor, plumber, or IT technician, this system helps get your skills officially recognized."
+    answer: "This platform is built for self-taught professionals, artisans, and experienced individuals who lack formal documentation but possess real-world experience. Whether you're a tailor, plumber, or IT technician, this system helps get your skills officially recognized."
   },
   {
     question: "Is AI used in the evaluation?",
@@ -62,7 +62,7 @@ export default function Page() {
   // Redirect unauthenticated users from protected pages
   const handleProtectedRedirect = (path: string) => {
     if (!session?.user) {
-      router.push("/api/auth/signin");
+      router.push("/login");
     } else {
       router.push(path);
     }
@@ -108,20 +108,14 @@ export default function Page() {
             Recognize Your Skills with <span className="text-purple-300">AI-Powered RPL</span>
           </h1>
           <p className="text-gray-100 max-w-xl text-lg mb-8">
-            Get certified for your real-world skills. Upload documents or take our AI-driven assessment.
+            Get certified for your real-world skills. Take our AI-driven assessment and upload supporting documents.
           </p>
           <div className="flex flex-col sm:flex-row gap-4">
-            <button
-              onClick={() => handleProtectedRedirect("/upload-documents")}
-              className="bg-white text-purple-700 px-8 py-3 rounded-full font-semibold hover:bg-gray-100"
-            >
-              I Have Documents
-            </button>
             <button
               onClick={() => handleProtectedRedirect("/assessment/phase-1")}
               className="bg-purple-600 text-white px-8 py-3 rounded-full font-semibold hover:bg-purple-700"
             >
-              I Don’t Have Documents
+              Start Verification Process
             </button>
           </div>
         </div>
@@ -172,39 +166,6 @@ export default function Page() {
               </div>
             ))}
           </div>
-        </div>
-      </section>
-
-      {/* Auth Area */}
-      <section className="py-12 bg-white text-center">
-        <div className="max-w-md mx-auto">
-          {session?.user ? (
-            <>
-              <p className="text-xl mb-4">Signed in as <strong>{session.user.name}</strong></p>
-              <button
-                 onClick={() => signOut({ callbackUrl: "/api/auth/signin" })}
-                  className="flex items-center gap-2 bg-red-500 text-white px-6 py-2 rounded-full hover:bg-red-600 transition-colors"
->
-                 <LogOut className="w-4 h-4" />
-                      Sign out
-                    </button>
-
-                <LogOut className="w-5 h-5" />
-                Sign out
-            
-            </>
-          ) : (
-            <>
-              <p className="text-lg mb-4">Sign in to begin your RPL journey</p>
-             <button
-               onClick={() => signIn("discord")}
-                 className="flex items-center gap-2 bg-purple-600 text-white px-6 py-2 rounded-full hover:bg-purple-700 transition-colors">
-              <LogIn className="w-4 h-4" />
-              Sign in
-             </button>
-
-            </>
-          )}
         </div>
       </section>
     </main>

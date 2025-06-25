@@ -23,7 +23,7 @@ export async function POST(req: Request) {
     const feedbacks = await Promise.all(
       imageUrls.map(async (url: string) => {
         const visionRes = await openai.chat.completions.create({
-          model: "gpt-4o",
+          model: "gpt-4o-mini",
           messages: [
             {
               role: "user",

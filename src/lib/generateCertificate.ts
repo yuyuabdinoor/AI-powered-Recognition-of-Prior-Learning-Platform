@@ -3,6 +3,11 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import type { PDFFont } from 'pdf-lib';
 import fetch from 'node-fetch';
+import { db } from '~/server/db';
+import { fillCertificate, type FillData } from '~/lib/fillCertificate';
+import { ThirdwebSDK, type NFT } from '@thirdweb-dev/sdk';
+import fs from 'fs';
+import path from 'path';
 
 export interface CertificateData {
   name: string;
@@ -84,7 +89,7 @@ export async function createCertificate(data: CertificateData): Promise<Buffer> 
     color: rgb(0.1, 0.1, 0.1),
   });
 
-  // “This certifies that”
+  // "This certifies that"
   const phrase = 'This certifies that';
   page.drawText(phrase.toUpperCase(), {
     x: width / 2 - helvetica.widthOfTextAtSize(phrase, 12) / 2,
@@ -181,4 +186,88 @@ export async function createCertificate(data: CertificateData): Promise<Buffer> 
 
   const pdfBytes = await pdfDoc.save();
   return Buffer.from(pdfBytes);
+}
+
+const CERT_DIR = path.join(process.cwd(), 'public', 'certificates');
+if (!fs.existsSync(CERT_DIR)) {
+  fs.mkdirSync(CERT_DIR, { recursive: true });
+}
+
+interface GenerateCertificateParams {
+  userId: string;
+  name: string;
+  field: string;
+  walletAddress?: string;
+  origin: string;
+  evidenceId: string;
+}
+
+export async function generateCertificate({
+  userId,
+  name,
+  field,
+  walletAddress,
+  origin,
+  evidenceId,
+}: GenerateCertificateParams) {
+  const date = new Date().toLocaleDateString('en-GB');
+
+  // 1. Generate the raw PDF
+  const data: FillData = { name, date, id: userId, field };
+  const pdfBuffer = await fillCertificate(data);
+
+  // 2. Define certificate path and public URL
+  const sanitizedField = field.replace(/[\\/]/g, '-'); // Replace slashes with hyphens
+  const uniqueId = userId ?? Date.now();
+  const certFilename = `Certificate_${sanitizedField}_${uniqueId}.pdf`;
+  const certFilePath = path.join(CERT_DIR, certFilename);
+  const certUrl = `${origin}/certificates/${certFilename}`;
+  
+  // 3. Save the PDF to the public directory
+  fs.writeFileSync(certFilePath, pdfBuffer);
+  
+  let tokenId = "";
+  let txHash = "";
+  let ipfsUrl = "";
+  
+  try {
+    if (walletAddress) {
+      const sdk = new ThirdwebSDK("mumbai", {
+        clientId: process.env.THIRDWEB_CLIENT_ID!,
+        secretKey: process.env.THIRDWEB_SECRET_KEY!,
+      });
+
+      const contract = await sdk.getContract(process.env.CERT_CONTRACT_ADDRESS!, "nft-collection");
+      
+      const metadata = {
+        name: `${name} RPL Certificate`,
+        description: `Recognition of Prior Learning for ${field}`,
+        image: fs.readFileSync(certFilePath), // Use the saved file
+        properties: { name, field, dateIssued: date, userId },
+      };
+
+      const tx = await contract.mintTo(walletAddress, metadata);
+      const nft: NFT = await tx.data();
+      
+      tokenId = tx.id?.toString() ?? "";
+      txHash = tx.receipt?.transactionHash ?? "";
+      ipfsUrl = nft.metadata?.image ?? ""; // This is the IPFS CID for the PDF
+    }
+  } catch (err) {
+    console.error("Blockchain anchoring failed:", err);
+  }
+
+  // 5. Save all details to the database
+  const newCertificate = await db.certificate.create({
+    data: {
+      userId: userId,
+      pdfUrl: certUrl, 
+      ipfsUrl: ipfsUrl,
+      tokenId: tokenId,
+      txHash: txHash,
+      evidenceId: evidenceId,
+    },
+  });
+
+  return newCertificate;
 }

@@ -22,12 +22,14 @@ You are an RPL assessor. Evaluate each scenario-based response.
 Score each answer from 1 to 10 and give feedback.
 
 Return a JSON array of objects with this format:
-{
-  "question": "...",
-  "answer": "...",
-  "score": 8,
-  "feedback": "Good reasoning but missed one step."
-}
+[
+  {
+    "question": "...",
+    "answer": "...",
+    "score": 8,
+    "feedback": "Good reasoning but missed one step."
+  }
+]
 `;
 
   const formattedInput = questions.map((q, i) => `Q: ${q}\nA: ${responses[i]}`).join("\n\n");
@@ -53,18 +55,17 @@ Return a JSON array of objects with this format:
   const scores = evaluation.map((e) => e.score);
   const feedback = evaluation.map((e) => e.feedback);
 
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-  const submission = await db.submission.create({
+  const evidence = await db.evidence.create({
     data: {
       userId: session.user.id,
-      phase: 2,
+      phase: 2, // Scenario Assessment
       field,
       questions,
       responses,
       scores,
-      feedback,
+      feedback: feedback.join('; '), // Consolidate feedback
     },
   });
 
-  return NextResponse.json({ success: true, submissionId: submission.id });
+  return NextResponse.json({ success: true, evidenceId: evidence.id });
 }

@@ -1,47 +1,80 @@
- 
- 
- 
 import { NextResponse } from "next/server";
 import { db } from "~/server/db";
 import { auth } from "~/server/auth";
+import { env } from "~/env";
+import { generateCertificate } from "~/lib/generateCertificate";
 
-export async function GET() {
+export async function GET(req: Request) {
   const session = await auth();
+  const { origin } = new URL(req.url);
 
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    // Fetch latest evidence assessment for the user
-    const evidence = await db.evidence.findFirst({
-      where: { userId: session.user.id },
-      orderBy: { createdAt: "desc" }
-    });
-
-    if (!evidence) {
-      return NextResponse.json(null, { status: 404 });
-    }
-
-    // Try to find a Certificate anchored for this field & user
-    const certificate = await db.certificate.findFirst({
-      where: { userId: session.user.id, /* optionally: field: evidence.field */ },
+    const evidenceRecords = await db.evidence.findMany({
+      where: {
+        userId: session.user.id,
+        phase: 4,
+      },
       orderBy: { createdAt: "desc" },
     });
 
-    return NextResponse.json({
-      field: evidence.field,
-      scores: [evidence.scores],         // Expect array for compatibility
-      feedback: [evidence.feedback],
-      responses: evidence.filenames,     // This is your uploaded files
-      createdAt: evidence.createdAt,
-      // Blockchain fields (can be undefined if not anchored)
-      tokenId: certificate?.tokenId ?? null,
-      txHash: certificate?.txHash ?? null,
-      pdfUrl: certificate?.pdfUrl ?? null,
-    });
+    if (!evidenceRecords.length) {
+      return NextResponse.json([], { status: 200 });
+    }
+
+    const results = await Promise.all(
+      evidenceRecords.map(async (evidence) => {
+        let certificate = await db.certificate.findFirst({
+          where: {
+            evidenceId: evidence.id,
+          },
+          orderBy: { createdAt: "desc" },
+        });
+
+        // If score is high enough and no cert exists, create one
+        if (evidence.overall_score >= env.PASS_THRESHOLD && !certificate) {
+          certificate = await generateCertificate({
+            userId: session.user.id,
+            name: session.user.name ?? "Anonymous",
+            field: evidence.field,
+            walletAddress: session.user.walletAddress,
+            origin: origin,
+            evidenceId: evidence.id,
+          });
+        }
+
+        return {
+          id: evidence.id,
+          field: evidence.field,
+          scores: evidence.scores,
+          justifications: evidence.justifications,
+          overall_score: evidence.overall_score,
+          feedback: evidence.feedback,
+          questions: evidence.questions,
+          responses: evidence.filenames,
+          createdAt: evidence.createdAt,
+          certificate: certificate
+            ? {
+                id: certificate.id,
+                tokenId: certificate.tokenId,
+                txHash: certificate.txHash,
+                pdfUrl: certificate.pdfUrl,
+                ipfsUrl: certificate.ipfsUrl,
+              }
+            : null,
+        };
+      })
+    );
+
+    return NextResponse.json(results);
   } catch (err) {
-    console.error("Failed to fetch evidence result:", err);
-    return NextResponse.json({ error: "Failed to fetch results" }, { status: 500 });
+    console.error("Failed to fetch evidence results:", err);
+    return NextResponse.json(
+      { error: "Failed to fetch results" },
+      { status: 500 }
+    );
   }
 }

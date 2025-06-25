@@ -10,7 +10,7 @@ const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY });
 export async function POST(req: NextRequest) {
   const { field } = await req.json();
 
-  const prompt = `Generate 5 scenario-based questions for the NITA field "${field}".
+  const prompt = `Generate ${env.SCENARIO_QUESTIONS_COUNT} scenario-based questions for the NITA field "${field}".
 Respond strictly as a JSON array of objects with this format:
 [
   { "question": "Your scenario question here", "competencyId": "FIELD-SCENARIO-001" }

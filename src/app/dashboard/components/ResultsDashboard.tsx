@@ -5,233 +5,288 @@
 
 import React, { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 import {
   Award,
   AlertTriangle,
   FileText,
   Download,
   CheckCircle,
-  XCircle,
+  QrCode,
+  PlusCircle,
+  ChevronRight,
+  List,
+  ArrowLeft,
+  ShieldCheck,
 } from 'lucide-react';
 import ScoreIndicator from './ScoreIndicator';
 import FeedbackSection from './FeedbackSection';
 import FilesList from './FileLists';
+import QRCode from 'qrcode';
+import Link from 'next/link';
+import ScoreChart from './ScoreChart';
+import { Loader } from 'lucide-react';
+import { env } from '~/env';
+
+interface Certificate {
+  id: string;
+  tokenId: string | null;
+  txHash: string | null;
+  pdfUrl: string | null;
+  ipfsUrl: string | null;
+  phase: string;
+}
 
 interface Submission {
+  id: string;
   field: string;
   scores: number[];
-  feedback: string[];
+  justifications: string[];
+  overall_score: number;
+  feedback: string;
+  questions: string[];
   responses: string[];
   createdAt: string;
-  qrHash?: string;
-  // Blockchain fields (add these if not already present)
-  tokenId?: string | null;
-  txHash?: string | null;
-  pdfUrl?: string | null;
+  certificate: Certificate | null;
+  phase: string;
 }
 
 export default function ResultsDashboard() {
-  const { data: session } = useSession();
-  const userName = session?.user?.name ?? 'Learner';
-  const [result, setResult] = useState<Submission | null>(null);
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  
+  const [results, setResults] = useState<Submission[]>([]);
+  const [selectedResult, setSelectedResult] = useState<Submission | null>(null);
   const [loading, setLoading] = useState(true);
-  const [loadingCertificate, setLoadingCertificate] = useState(false);
 
   useEffect(() => {
-    async function fetchResults() {
-      try {
-        const res = await fetch('/api/final_result');
-        const data = await res.json();
-        setResult(data);
-      } catch (error) {
-        console.error('Error fetching results:', error);
-        setResult(null);
-      } finally {
-        setLoading(false);
+    if (status === 'unauthenticated') {
+      router.push('/login');
+    }
+
+    if (status === 'authenticated') {
+      async function fetchResults() {
+        try {
+          const res = await fetch('/api/final_result');
+          if (!res.ok) {
+            throw new Error('Failed to fetch results');
+          }
+          const data = await res.json();
+          setResults(data);
+        } catch (error) {
+          console.error('Error fetching results:', error);
+        } finally {
+          setLoading(false);
+        }
       }
+      void fetchResults();
     }
-    void fetchResults();
-  }, []);
+  }, [status, router]);
 
-  const handleDownloadCertificate = async () => {
-    if (!result) return;
-    setLoadingCertificate(true);
-    try {
-      const qr = result.qrHash ?? '';
-      let downloadUrl = `/api/generate-certificate?` +
-        `name=${encodeURIComponent(userName)}` +
-        `&field=${encodeURIComponent(result.field)}`;
-      if (qr) downloadUrl += `&qr=${encodeURIComponent(qr)}`;
-
-      const res = await fetch(downloadUrl);
-      if (!res.ok) throw new Error('Certificate generation failed');
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `Certificate_${result.field}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-
-      // Redirect to jobs page (optional)
-      const query = encodeURIComponent(result.field + ' jobs');
-      const techKeywords = /(it|software|computer|ict|developer)/i;
-      const isTech = techKeywords.test(result.field);
-      const jobUrl = isTech
-        ? `https://www.linkedin.com/jobs/search?keywords=${query}`
-        : `https://www.indeed.com/jobs?q=${query}`;
-      window.location.href = jobUrl;
-    } catch (error) {
-      console.error('Download or redirect failed:', error);
-      alert('Certificate download or redirect failed. Check console for details.');
-    } finally {
-      setLoadingCertificate(false);
-    }
-  };
-
-  if (loading) {
+  const DetailedResultView = ({
+    result,
+    onBack,
+  }: {
+    result: Submission;
+    onBack: () => void;
+  }) => {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500" />
-          <p className="mt-4 text-lg text-gray-700">Loading your assessment results...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!result) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center p-8 max-w-md bg-white rounded-lg shadow-lg">
-          <XCircle className="mx-auto h-16 w-16 text-red-500 mb-4" />
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">Results Not Found</h2>
-          <p className="text-gray-600 mb-4">
-            We couldn&apos;t find your assessment results. Please try again later.
-          </p>
-          <a
-            href="/"
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-          >
-            Return to Home
-          </a>
-        </div>
-      </div>
-    );
-  }
-
-  const isPassed = (result.scores[0] ?? 0) >= 6;
-
-  return (
-    <div className="max-w-4xl mx-auto py-10 px-4 min-h-screen">
-      <header className="mb-8 text-center">
-        <h1 className="text-4xl font-bold text-gray-800 mb-2">Assessment Results</h1>
-        <p className="text-gray-600">Recognition of Prior Learning (RPL) Evaluation</p>
-      </header>
-
-      <div className="bg-white shadow-lg rounded-xl overflow-hidden transform transition-all">
-        <div
-          className={`w-full py-4 px-6 flex items-center justify-between ${
-            isPassed ? 'bg-green-500' : 'bg-amber-500'
-          }`}
+      <div className="animate-fade-in">
+        <button
+          onClick={onBack}
+          className="mb-4 inline-flex items-center gap-2 rounded-md bg-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-300"
         >
-          <div className="flex items-center">
-            {isPassed ? (
-              <CheckCircle className="h-6 w-6 text-white mr-2" />
-            ) : (
-              <AlertTriangle className="h-6 w-6 text-white mr-2" />
-            )}
-            <h2 className="text-xl font-bold text-white">
-              {isPassed ? 'Assessment Passed' : 'Assessment Needs Improvement'}
-            </h2>
-          </div>
-          <span className="text-sm font-medium px-3 py-1 rounded-full bg-white/20 text-white backdrop-blur-sm">
-            {result.field}
-          </span>
-        </div>
-
-        <div className="p-6">
-          <div className="mb-8">
-            <div className="flex flex-col md:flex-row items-center justify-between">
-              <h3 className="text-2xl font-bold text-gray-800 mb-4 md:mb-0">Overall Performance</h3>
-              <div className="flex items-center">
-                <span className="text-gray-600 mr-2">Score:</span>
-                <ScoreIndicator score={result.scores[0] ?? 0} maxScore={10} />
+          <ArrowLeft size={16} />
+          Back to All Results
+        </button>
+        <div className="rounded-lg bg-white p-6 shadow-md">
+          <div className="flex flex-col items-start justify-between gap-4 border-b border-gray-200 pb-4 sm:flex-row">
+            <div>
+              <h2 className="text-2xl font-bold">
+                Assessment Result: {result.field}
+              </h2>
+              <p className="text-sm text-gray-500">
+                Completed on: {new Date(result.createdAt).toLocaleString()}
+              </p>
+            </div>
+            {result.certificate && result.overall_score >= env.NEXT_PUBLIC_PASS_THRESHOLD && (
+              <div className="flex flex-shrink-0 space-x-2">
+                <a
+                  href={result.certificate.pdfUrl ?? '#'}
+                  download
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                >
+                  <Download size={16} />
+                  Download Certificate
+                </a>
+                <a
+                  href={`/verify/${result.certificate.id}`}
+                  className="inline-flex items-center gap-2 rounded-md bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <ShieldCheck size={16} />
+                  Verify Certificate
+                </a>
               </div>
+            )}
+          </div>
+          <div className="mt-6 grid grid-cols-1 gap-8 md:grid-cols-3">
+            <div className="md:col-span-1">
+              <div className="rounded-lg bg-gray-50 p-6">
+                <h3 className="text-lg font-semibold">Overall Score</h3>
+                <div className="mt-4 flex justify-center">
+                  <ScoreIndicator
+                    score={result.overall_score}
+                    maxScore={10}
+                  />
+                </div>
+                <p className="mt-4 text-center text-sm text-gray-600">
+                  {result.feedback}
+                </p>
+              </div>
+            </div>
+            <div className="md:col-span-2">
+              <ScoreChart scores={result.scores} questions={result.questions} />
             </div>
           </div>
 
-          <FeedbackSection summary={result.feedback[0] ?? 'No summary'} isPassed={isPassed} />
-
           <div className="mt-8">
-            <h3 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
-              <FileText className="h-5 w-5 mr-2 text-blue-500" />
-              Assessment Portfolio
-            </h3>
-            <FilesList files={result.responses} />
+            <FeedbackSection
+              summary={result.feedback}
+              isPassed={result.overall_score >= env.NEXT_PUBLIC_PASS_THRESHOLD}
+              questions={result.questions}
+              justifications={result.justifications}
+            />
           </div>
 
-          <div className="mt-10 pt-6 border-t border-gray-200 text-center">
-            {isPassed ? (
-              <>
-                <Award className="h-12 w-12 text-green-500 mx-auto mb-2" />
-                <h3 className="text-xl font-bold text-gray-800">Congratulations!</h3>
-                <p className="text-gray-600 mb-4">
-                  You&apos;ve demonstrated the required competencies in {result.field}.
-                </p>
-                <button
-                  onClick={handleDownloadCertificate}
-                  disabled={loadingCertificate}
-                  className="mt-6 inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400"
-                >
-                  {loadingCertificate ? (
-                    <>…Preparing Certificate…</>
-                  ) : (
-                    <><Download className="h-5 w-5 mr-2" /> Download Certificate & View Jobs</>
-                  )}
-                </button>
-                {/* Blockchain links and info */}
-                {result.txHash && (
-                  <a
-                    href={`https://mumbai.polygonscan.com/tx/${result.txHash}`}
-                    target="_blank"
-                    rel="noopener"
-                    className="mt-4 ml-3 inline-flex items-center px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700"
-                  >
-                    <Award className="h-5 w-5 mr-2" />
-                    View On-Chain Proof
-                  </a>
-                )}
-                {result.pdfUrl && result.pdfUrl.startsWith('ipfs://') && (
-                  <a
-                    href={result.pdfUrl.replace('ipfs://', 'https://ipfs.io/ipfs/')}
-                    target="_blank"
-                    rel="noopener"
-                    className="mt-2 ml-3 inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
-                  >
-                    <Download className="h-5 w-5 mr-2" />
-                    Download from IPFS
-                  </a>
-                )}
-                {result.tokenId && (
-                  <div className="mt-2 text-gray-600 text-sm">
-                    <span className="font-mono bg-gray-100 rounded px-2 py-1">Blockchain Token ID: {result.tokenId}</span>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-6">…</div>
-            )}
-          </div>
+          {result.responses && (
+            <div className="mt-8">
+              <h3 className="text-lg font-semibold">Supporting Documents</h3>
+              <FilesList files={result.responses as any} />
+            </div>
+          )}
         </div>
       </div>
+    );
+  };
 
-      <footer className="mt-10 text-center text-sm text-gray-500">
-        <p>Assessment completed and verified according to NITA standards.</p>
-        <p className="mt-1">© 2025 RPL Assessment Platform</p>
-      </footer>
+  const userName = session?.user?.name ?? 'Learner';
+
+  if (status === 'loading' || loading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <Loader className="h-12 w-12 animate-spin text-purple-600" />
+      </div>
+    );
+  }
+
+  if (status === 'unauthenticated') {
+    // This is a fallback while the redirect is happening
+    return null;
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <main className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+        {!selectedResult ? (
+          <div className="animate-fade-in">
+            <div className="flex flex-col items-start justify-between gap-4 sm:flex-row">
+              <div>
+                <h1 className="text-3xl font-bold tracking-tight text-gray-900">
+                  Welcome back, {userName}!
+                </h1>
+                <p className="mt-1 text-sm text-gray-500">
+                  Here are your past assessment results.
+                </p>
+              </div>
+              <button
+                onClick={() => router.push('/assessment/phase-1')}
+                className="inline-flex items-center justify-center gap-2 rounded-md border border-transparent bg-purple-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
+              >
+                <PlusCircle size={18} />
+                Start New Assessment
+              </button>
+            </div>
+
+            <div className="mt-8">
+              {results.length > 0 ? (
+                <ul role="list" className="space-y-4">
+                  {results.map(result => (
+                    <li
+                      key={result.id}
+                      onClick={() => setSelectedResult(result)}
+                      className="cursor-pointer overflow-hidden rounded-md bg-white shadow transition-shadow duration-200 hover:shadow-lg"
+                    >
+                      <div className="flex items-center justify-between p-4">
+                        <div className="flex items-center gap-4">
+                          <div
+                            className={`flex h-12 w-12 items-center justify-center rounded-full ${
+                              result.overall_score >= env.NEXT_PUBLIC_PASS_THRESHOLD
+                                ? 'bg-green-100'
+                                : 'bg-red-100'
+                            }`}
+                          >
+                            {result.overall_score >= env.NEXT_PUBLIC_PASS_THRESHOLD ? (
+                              <CheckCircle
+                                className="h-6 w-6 text-green-600"
+                                aria-hidden="true"
+                              />
+                            ) : (
+                              <AlertTriangle
+                                className="h-6 w-6 text-red-600"
+                                aria-hidden="true"
+                              />
+                            )}
+                          </div>
+                          <div>
+                            <p className="truncate text-sm font-medium text-purple-600">
+                              Assessment for {result.field}
+                            </p>
+                            <div className="mt-1 flex items-center">
+                              <p className="text-sm text-gray-500">
+                                Completed on:{' '}
+                                {new Date(result.createdAt).toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex flex-shrink-0 items-center gap-4">
+                          <ScoreIndicator
+                            score={result.overall_score}
+                            size="sm"
+                          />
+                          <ChevronRight
+                            className="h-5 w-5 text-gray-400"
+                            aria-hidden="true"
+                          />
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="rounded-lg border-2 border-dashed border-gray-300 p-12 text-center">
+                  <List className="mx-auto h-12 w-12 text-gray-400" />
+                  <h3 className="mt-2 text-sm font-medium text-gray-900">
+                    No assessments
+                  </h3>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Get started by taking your first assessment.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <DetailedResultView
+            result={selectedResult}
+            onBack={() => setSelectedResult(null)}
+          />
+        )}
+      </main>
     </div>
   );
 }

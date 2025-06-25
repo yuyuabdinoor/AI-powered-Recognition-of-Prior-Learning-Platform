@@ -13,6 +13,14 @@ export async function POST(req: Request) {
   try {
     const { certId, userWallet } = await req.json();
 
+    // Basic wallet address validation
+    if (!userWallet || !/^0x[a-fA-F0-9]{40}$/.test(userWallet)) {
+      return NextResponse.json(
+        { error: 'Invalid wallet address provided.' },
+        { status: 400 },
+      );
+    }
+
     // 1. Fetch the certificate from DB
     const cert = await db.certificate.findUnique({ where: { id: certId } });
     if (!cert) return NextResponse.json({ error: "Certificate not found" }, { status: 404 });

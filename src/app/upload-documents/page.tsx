@@ -2,26 +2,29 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 'use client';
-import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { FileUp, CheckCircle, AlertCircle, Info } from 'lucide-react';
+import { signOut } from 'next-auth/react';
 import EvidenceTypeCard from './components/EvidenceTypeCard';
 import { evidenceTypes } from './components/evidenceTypes';
 
-const fieldOptions = [
-  { value: '', label: 'Select Field' },
-  { value: 'Tailoring', label: 'Tailoring' },
-  { value: 'Plumbing', label: 'Plumbing' },
-  { value: 'ICT', label: 'ICT' },
-  // Add more as needed
-];
-
 export default function UploadDocumentsPage() {
   const [files, setFiles] = useState<File[]>([]);
-  const [selectedField, setSelectedField] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const field = searchParams.get('field');
+
+  useEffect(() => {
+    if (!field) {
+      // Handle case where field is not in URL, maybe redirect or show an error
+      console.error("No field specified in the URL.");
+      // Example: Redirect to the first phase if no field is provided
+      router.push('/assessment/phase-1');
+    }
+  }, [field, router]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -31,11 +34,11 @@ export default function UploadDocumentsPage() {
   };
 
   const handleSubmit = async () => {
-    if (files.length === 0 || !selectedField) return;
+    if (files.length === 0 || !field) return;
 
     const formData = new FormData();
     files.forEach(file => formData.append('files', file));
-    formData.append('field', selectedField);
+    formData.append('field', field);
 
     setUploading(true);
     try {
@@ -43,6 +46,12 @@ export default function UploadDocumentsPage() {
         method: 'POST',
         body: formData,
       });
+
+      if (res.status === 401) {
+        alert('Your session has expired. Please log in again.');
+        await signOut({ callbackUrl: '/login' });
+        return;
+      }
 
       const result = await res.json();
       if (result.success) {
@@ -90,25 +99,8 @@ export default function UploadDocumentsPage() {
         </div>
 
         <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">Upload Your Documents</h2>
+          <h2 className="text-xl font-semibold text-gray-800 mb-4">Upload Your Documents for {field}</h2>
           
-          {/* Field Selection */}
-          <div className="mb-4">
-            <label className="block text-gray-700 font-medium mb-2" htmlFor="field-select">
-              Choose your assessment field:
-            </label>
-            <select
-              id="field-select"
-              value={selectedField}
-              onChange={(e) => setSelectedField(e.target.value)}
-              className="border px-3 py-2 rounded-md w-full"
-            >
-              {fieldOptions.map(opt => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          </div>
-
           {/* File Upload Area */}
           <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-purple-400 transition-colors duration-200">
             <div className="space-y-2">
@@ -171,7 +163,7 @@ export default function UploadDocumentsPage() {
             <button
               onClick={handleSubmit}
               className="w-full sm:w-auto bg-purple-600 text-white px-6 py-3 rounded-md font-medium hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-              disabled={files.length === 0 || uploading || !selectedField}
+              disabled={files.length === 0 || uploading || !field}
             >
               {uploading ? (
                 <>

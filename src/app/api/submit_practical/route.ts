@@ -1,4 +1,3 @@
- 
 import { NextResponse } from "next/server";
 import { auth } from "~/server/auth";
 import { db } from "~/server/db";
@@ -29,20 +28,19 @@ export async function POST(req: Request) {
     fileNames.push(filename);
   }
 
-   
-  await db.submission.create({
+  await db.evidence.create({
     data: {
       userId: session.user.id,
-      phase: 3,
+      phase: 3, // Practical Submission
       field,
       questions: [question],
-      responses: fileNames,
-      feedback: notes ? [notes] : [],
+      responses: fileNames, // Store uploaded filenames
+      scores: [], // No AI scoring at this stage
+      feedback: notes || "", // Store user's notes
     },
   });
 
-   
-  return NextResponse.json({ success: true, uploaded: fileNames,field,question });
+  return NextResponse.json({ success: true, uploaded: fileNames, field, question });
 }
 export const dynamic = "force-dynamic"; // Ensure this route is always fresh
 export const revalidate = 0; // Disable caching for this route

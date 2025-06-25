@@ -68,17 +68,17 @@ Return the result in JSON format like:
   const scores = evaluation.map((e) => e.score);
   const feedback = evaluation.map((e) => e.feedback);
 
-  const submission = await db.submission.create({
+  const evidence = await db.evidence.create({
     data: {
       userId: session.user.id,
-      phase: 1,
+      phase: 1, // Knowledge Assessment
       field,
       questions,
       responses: answers,
       scores,
-      feedback,
+      feedback: feedback.join('; '), // Consolidate feedback into a single string for now
     },
   });
 
-  return NextResponse.json({ success: true, submissionId: submission.id });
+  return NextResponse.json({ success: true, evidenceId: evidence.id });
 }

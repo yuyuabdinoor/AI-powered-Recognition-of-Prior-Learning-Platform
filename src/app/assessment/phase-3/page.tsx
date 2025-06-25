@@ -34,8 +34,19 @@ export default function Page() {
             headers: { 'Content-Type': 'application/json' },
           });
 
+          if (!res.ok) {
+            // It's better to throw an error to be caught by the catch block
+            throw new Error(`API responded with status ${res.status}`);
+          }
+
           const data = await res.json();
           const task = data.question;
+
+          if (!task) {
+            // Handle cases where the API returns a success status but no question
+            throw new Error("No practical task received from the API.");
+          }
+          
           setPracticalQuestion(task);
           localStorage.setItem('phase-3_question', task);
         } catch (err) {
@@ -76,23 +87,9 @@ export default function Page() {
 
     if (res.ok) {
       setSubmitted(true);
-      const result = await res.json();
-      const uploadedFilenames = result.uploaded;
-      const practicalQuestion = result.question;
-      const task = localStorage.getItem('phase-3_question') ?? practicalQuestion;
-
-      await fetch('/api/evaluate_practical', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          imageUrls: uploadedFilenames.map((name: string) => `${window.location.origin}/uploads/${name}`),
-          field,
-          practicalQuestion: task,
-        }),
-      });
-
-      // Redirect to upload documents page instead of dashboard
-      window.location.href = '/upload-documents';
+      setTimeout(() => {
+        window.location.href = `/upload-documents?field=${encodeURIComponent(field)}`;
+      }, 1500);
     } else {
       alert('Upload failed. Please try again.');
     }
@@ -116,12 +113,12 @@ export default function Page() {
 
         <div className="mb-6">
           <label className="block font-medium mb-2 text-gray-700">
-            Upload Files (images or PDFs)
+            Upload Files (HTML, CSS, images, or PDFs)
           </label>
           <div className="relative border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-500 transition-colors">
             <input
               type="file"
-              accept="image/*,application/pdf"
+              accept="text/html,text/css,image/*,application/pdf"
               onChange={handleFileChange}
               multiple
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
@@ -136,7 +133,7 @@ export default function Page() {
               <div className="flex flex-col items-center justify-center text-gray-500">
                 <Upload className="w-8 h-8 mb-2" />
                 <p className="text-sm">Click to upload your work samples</p>
-                <p className="text-xs text-gray-400">(PDF or image files)</p>
+                <p className="text-xs text-gray-400">(HTML, CSS, PDF, or image files)</p>
               </div>
             )}
           </div>
@@ -166,7 +163,7 @@ export default function Page() {
             {uploading ? 'Uploading...' : submitted ? (
               <>
                 <CheckCircle className="w-5 h-5 mr-2" />
-                Uploaded!
+                Uploaded! Redirecting...
               </>
             ) : (
               <>
@@ -178,7 +175,7 @@ export default function Page() {
 
         {submitted && (
           <div className="mt-6 text-green-600 font-medium text-center">
-            Upload complete! Redirecting to documents upload...
+            Upload complete! You will be redirected shortly.
           </div>
         )}
       </div>

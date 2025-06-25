@@ -2,13 +2,14 @@
 // /src/app/api/generate_questions/route.ts
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
+import { env } from "~/env";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
 export async function POST(req: Request) {
   const { field } = await req.json();
 
-  const prompt = `Generate 8 knowledge-based questions for assessing skills in the NITA field of "${field}". 
+  const prompt = `Generate ${env.KNOWLEDGE_QUESTIONS_COUNT} knowledge-based questions for assessing skills in the NITA field of "${field}". 
 Each question should target a specific subfield such as "SAFETY", "TOOLS", "TECHNIQUE", etc. 
 Format the response as a JSON array like:
 [
